@@ -13,6 +13,12 @@ module.exports = ({
 
 
     },
+    getProductById:async(req,res,next)=>{
+        const paramsID = req.params.id;
+        const particularData = await productData.findById(paramsID)
+        res.send(particularData)
+    },
+
     addProduct: async (req, res, next) => {
 
         const products = new productData(req.body)

@@ -8,4 +8,6 @@ router.get("/getproducts",adminController.getAllProduct)
 
 router.get("/abc",adminController.sample)
 
+router.get("/getproductbyid/:id",adminController.getProductById)
+
 module.exports = router;
