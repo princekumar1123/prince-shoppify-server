@@ -60,7 +60,7 @@
 
 
 
-
+const productData = require('../../models/AdminModel/productsData')
 const createError = require("http-errors");
 const handleAsync = (fn) => async (req, res, next) => {
     try {
@@ -72,19 +72,19 @@ const handleAsync = (fn) => async (req, res, next) => {
 
 module.exports = {
     getAllProducts: handleAsync(async (req, res) => {
-        const products = await ProductData.find({}, { __v: 0 });
+        const products = await productData.find({}, { __v: 0 });
         res.status(200).json(products);
     }),
 
     getProductById: handleAsync(async (req, res) => {
         const { id } = req.params;
-        const product = await ProductData.findById(id);
+        const product = await productData.findById(id);
         if (!product) throw createError(404, "Product not found");
         res.status(200).json(product);
     }),
 
     addProduct: handleAsync(async (req, res) => {
-        const product = new ProductData(req.body);
+        const product = new productData(req.body);
         const savedProduct = await product.save();
         res.status(201).json(savedProduct);
     }),
@@ -93,16 +93,15 @@ module.exports = {
         const { id } = req.params;
         const update = req.body;
         const options = { new: true, runValidators: true };
-        const updatedProduct = await ProductData.findByIdAndUpdate(id, update, options);
+        const updatedProduct = await productData.findByIdAndUpdate(id, update, options);
         if (!updatedProduct) throw createError(404, "Product not found");
         res.status(200).json(updatedProduct);
     }),
 
     deleteProduct: handleAsync(async (req, res) => {
         const { id } = req.params;
-        const deletedProduct = await ProductData.findByIdAndDelete(id);
+        const deletedProduct = await productData.findByIdAndDelete(id);
         if (!deletedProduct) throw createError(404, "Product not found");
         res.status(200).json({ message: "Product deleted successfully" });
     }),
 };
-
