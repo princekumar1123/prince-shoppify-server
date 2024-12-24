@@ -1,17 +1,18 @@
+require('dotenv').config()
 const express = require('express');
 const morgan = require('morgan');
 const cors = require('cors')
-require('dotenv').config()
+
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.json());
 app.use(morgan('dev'));
 app.use(cors(
-    {
-        credentials: true, // Allow cookies
+    // {
+    //     credentials: true, // Allow cookies
 
-    }
+    // }
 ))
 app.use(express.urlencoded({ extended: true }))
 
