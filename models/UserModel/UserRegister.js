@@ -22,6 +22,10 @@ const RegisterSchema = new Schema({
     password: {
         type: String,
         required: true,
+    },
+    addToCart: {
+        type: [],
+        required:false
     }
 });
 
