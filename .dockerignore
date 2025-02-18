@@ -1,0 +1,4 @@
+# Node.js dependencies (if using Node.js)
+node_modules
+npm-debug.log
+yarn-error.log
