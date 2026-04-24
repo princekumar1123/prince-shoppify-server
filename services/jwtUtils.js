@@ -1,15 +1,15 @@
-const jwt = require('jsonwebtoken');
+const jwt = require("jsonwebtoken");
 
 const generateToken = (payload) => {
-  const secretKey = 'princekumar1123';
-  const options = {
-    expiresIn: '12h',
-  };
-
-  const token = jwt.sign(payload, secretKey, options);
-  return token;
+    const secretKey = process.env.JWT_SECRET;
+    if (!secretKey) throw new Error("JWT_SECRET is not defined in environment");
+    return jwt.sign(payload, secretKey, { expiresIn: "12h" });
 };
 
-module.exports = {
-  generateToken
+const verifyToken = (token) => {
+    const secretKey = process.env.JWT_SECRET;
+    if (!secretKey) throw new Error("JWT_SECRET is not defined in environment");
+    return jwt.verify(token, secretKey);
 };
+
+module.exports = { generateToken, verifyToken };

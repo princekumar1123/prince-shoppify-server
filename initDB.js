@@ -1,79 +1,39 @@
-//For Connect the Single DB
-
 const mongoose = require("mongoose");
 
-const dbUrl = "mongodb+srv://prince:TZiwzJ2R5oDhdVmA@prince-shoppify-cluster.gmyuu.mongodb.net/?retryWrites=true&w=majority&appName=prince-shoppify-cluster"
-
-const connectionParams = {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}
-
 module.exports = () => {
+    const dbUrl = process.env.MONGODB_URI;
 
-  
-  mongoose
-    .connect(dbUrl, connectionParams)
-    .then(() => {
-      console.log("Mongodb database is connected...");
-    })
-    .catch((err) => {
-      console.log(err.message);
+    if (!dbUrl) {
+        console.error("MONGODB_URI is not defined in .env");
+        process.exit(1);
+    }
+
+    mongoose
+        .connect(dbUrl, { dbName: process.env.DB_NAME })
+        .then(() => {
+            console.log("MongoDB database is connected...");
+        })
+        .catch((err) => {
+            console.error("MongoDB connection error:", err.message);
+            process.exit(1);
+        });
+
+    mongoose.connection.on("connected", () => {
+        console.log("Mongoose connected to database");
     });
 
-  // mongoose
-  //   .connect(process.env.MONGODB_URI, { dbName: process.env.DB_NAME })
-  //   .then(() => {
-  //     console.log("Mongodb database is connected...");
-  //   })
-  //   .catch((err) => {
-  //     console.log(err.message);
-  //   });
+    mongoose.connection.on("error", (error) => {
+        console.error("Mongoose error:", error.message);
+    });
 
-  ///***mongoose events */
-  mongoose.connection.on("connected", () => {
-    console.log("Mongoose connected to database");
-  });
+    mongoose.connection.on("disconnected", () => {
+        console.log("Mongoose connection disconnected");
+    });
 
-  mongoose.connection.on("error", (error) => {
-    console.log(error.message);
-  });
-
-  mongoose.connection.on("disconnected", () => {
-    console.log("Mongoose connection is disconnected...");
-  });
+    // Graceful shutdown
+    process.on("SIGINT", async () => {
+        await mongoose.connection.close();
+        console.log("Mongoose connection closed on app termination");
+        process.exit(0);
+    });
 };
-
-
-
-
-
-// //  For Connect multiple DB at the same time
-// const mongoose = require("mongoose");
-
-// const dbUrls = [
-//   "mongodb+srv://prince:TZiwzJ2R5oDhdVmA@prince-shoppify-cluster.gmyuu.mongodb.net/?retryWrites=true&w=majority&appName=prince-shoppify-cluster",
-//   "mongodb+srv://saravananpraveen07:pePC8CF45GcYTzTO@praveencluster.ftixo.mongodb.net/?retryWrites=true&w=majority&appName=praveenCluster",
-// ];
-
-// const connectionParams = {
-//   useNewUrlParser: true,
-//   useUnifiedTopology: true,
-// };
-
-// module.exports = async () => {
-//   try {
-//     const dbConnections = await Promise.all(
-//       dbUrls.map((url) =>
-//         mongoose.createConnection(url, connectionParams).asPromise()
-//       )
-//     );
-
-//     // Attach connections to app.locals for global access
-//     console.log("All MongoDB connections are established.");
-//     return dbConnections;
-//   } catch (error) {
-//     console.error("Error connecting to MongoDB:", error.message);
-//     throw error;
-//   }
-// };

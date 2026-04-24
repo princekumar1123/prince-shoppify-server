@@ -1,358 +1,444 @@
-// For single db connection
-
 const createError = require("http-errors");
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const registerData = require("../../models/UserModel/UserRegister");
-const jwt = require("jsonwebtoken");
+const productData = require("../../models/AdminModel/productsData");
 const { generateToken } = require("../../services/jwtUtils");
+const jwt = require("jsonwebtoken");
 
-
-
-module.exports = {
-    getAlluserData: async (req, res, next) => {
-        // next(new Error("cannot get the userData.."))
-        // res.send("getting the list of the all userData in the home page of the application...")
-        try {
-            const result = await registerData.find({}, { __v: 0 }); //find method takes two parameter i.e.,(query, projection)...
-
-            //******to pass the required field as 1 and not required as 0 */
-            // const result = await userData.find({}, { name:1,price:1, _id:0 }); //find method takes two parameter i.e.,(query, projection)...
-
-            // const result = await userData.find({price:90000}, {}); // to pass in query of the exact match value in the response data of an arrary of object.
-            console.log("result", result);
-            res.send(result);
-        } catch (error) {
-            console.log(error.message);
-        }
-    },
-
-    createNewUser: async (req, res, next) => {
-        try {
-            let body = req.body;
-            const bodyPassword = body.password;
-            const saltRounds = 10;
-            bcrypt.hash(bodyPassword, saltRounds, async function (err, hash) {
-                body = { ...body, password: hash };
-                console.log("body", body)
-                const register = new registerData(body);
-                console.log("register", register)
-                const result = await register.save();
-                console.log("result", result)
-                res.send({ status: true, result });
-            });
-        } catch (error) {
-            console.log("error", error)
-        }
-    },
-
-
-    loginCredential: async (req, res, next) => {
-        const { email, password: payloadPassword } = req.body;
-        const { password: dbPassword } = await registerData.findOne({ email });
-        const { _id:id, name:dbName } = await registerData.findOne({ email })
-
-        console.log("id",id);
-        console.log("dbName",dbName);
-
-
-        bcrypt.compare(payloadPassword, dbPassword, function (err, result) {
-            console.log("result", result);
-
-            if (result) {
-                const token = generateToken({ email: email, password: dbPassword });
-
-                console.log("token", token);
-
-
-                const refreshToken = jwt.sign(
-                    {
-                        email: email,
-                        password: dbPassword,
-                    },
-                    process.env.REFRESH_TOKEN_SECRET,
-                    { expiresIn: "1d" }
-                );
-
-                console.log("refreshToken", refreshToken);
-                res.cookie("jwt", refreshToken, {
-                    httpOnly: true,
-                    sameSite: "None",
-                    secure: true,
-                    maxAge: 24 * 60 * 60 * 1000,
-                });
-
-                res.send({
-                    status: true,
-                    message: "Authentication successfull",
-                    token: token,
-                    id,
-                    name:dbName
-                });
-            } else {
-                res.send({
-                    status: false,
-                    message: "Authentication failed",
-                });
-            }
-        });
-    },
-
-    findUserById: async (req, res, next) => {
-        // res.send("userData taken by the id.")
-        const id = req.params.id;
-        try {
-            const userData = await registerData.findById(id); /// using the "findById" method
-
-            // const userData = await userData.findOne({ _id: id });   ////**** using the "findOne" method */
-            if (!userData) {
-                throw createError(404, "User doesn't  exist!!!");
-            }
-
-            res.send(userData);
-        } catch (error) {
-            console.log(error.message);
-            if (error instanceof mongoose.CastError) {
-                next(createError(400, "Invalid User ID"));
-                return;
-            }
-            next(error); //nested router optional
-        }
-    },
-
-    updateUserById: async (req, res, next) => {
-        // res.send("userData details are updated successfully by the id.")
-        try {
-            const id = req.params.id;
-            const update = req.body;
-
-            const option = { new: true }; //**optional paramter for below function to get the updated value. */
-            const result = await registerData.findByIdAndUpdate(id, update, option); //*** this function takes three parameter */
-
-            if (!result) {
-                throw createError(404, "User doesn't exist");
-            }
-            res.send(result);
-        } catch (error) {
-            console.log(error.message);
-            if (error instanceof mongoose.CastError) {
-                return next(createError(400, "Invalid User ID"));
-            }
-            next(error);
-        }
-    },
-
-    deleteUserById: async (req, res, next) => {
-        // res.send("User was deleted successfully.")
-        const id = req.params.id;
-        try {
-            const result = await registerData.findByIdAndDelete(id);
-            if (!result) {
-                throw createError(404, "User doesn't  exist!!!");
-            }
-            console.log(result);
-            res.send(result);
-        } catch (error) {
-            console.log(error.message);
-            if (error instanceof mongoose.CastError) {
-                next(createError(400, "Invalid User ID"));
-                return;
-            }
-            next(error);
-        }
-    },
+const handleAsync = (fn) => async (req, res, next) => {
+    try {
+        await fn(req, res, next);
+    } catch (error) {
+        next(error);
+    }
 };
 
+module.exports = {
+    // ── Auth ──────────────────────────────────────────────────────────────────
 
+    createNewUser: handleAsync(async (req, res) => {
+        const { name, email, mobile, password, gender } = req.body;
 
-// // For multiple DB connection at a same time
-// const createError = require("http-errors");
-// const bcrypt = require("bcrypt");
-// const jwt = require("jsonwebtoken");
-// const { generateToken } = require("../../services/jwtUtils");
+        const existing = await registerData.findOne({ $or: [{ email }, { mobile }] });
+        if (existing) {
+            throw createError(409, "Email or mobile already registered.");
+        }
 
-// module.exports = {
-//     getAlluserData: async (req, res, next) => {
-//         try {
-//             const connections = req.app.locals.dbConnections;
-//             const results = await Promise.all(
-//                 connections.map(async (conn) => {
-//                     const registerData = conn.model("UserRegister", require("../../models/UserModel/UserRegister").schema);
-//                     return await registerData.find({}, { __v: 0 });
-//                 })
-//             );
+        const hash = await bcrypt.hash(password, 10);
+        const user = new registerData({ name, email, mobile, password: hash, gender });
+        const result = await user.save();
 
-//             res.send({ status: true, data: results });
-//         } catch (error) {
-//             console.error(error.message);
-//             next(createError(500, "Error fetching user data"));
-//         }
-//     },
+        res.status(201).json({ status: true, message: "Registration successful", result });
+    }),
 
-//     createNewUser: async (req, res, next) => {
-//         try {
-//             const connections = req.app.locals.dbConnections;
-//             let { password, ...userData } = req.body;
-//             const saltRounds = 10;
+    loginCredential: handleAsync(async (req, res) => {
+        const { email, password: payloadPassword } = req.body;
 
-//             bcrypt.hash(password, saltRounds, async function (err, hash) {
-//                 if (err) {
-//                     throw createError(500, "Error encrypting password");
-//                 }
+        const user = await registerData.findOne({ email });
+        if (!user) {
+            throw createError(401, "Invalid email or password.");
+        }
 
-//                 userData.password = hash;
+        const isMatch = await bcrypt.compare(payloadPassword, user.password);
+        if (!isMatch) {
+            throw createError(401, "Invalid email or password.");
+        }
 
-//                 const results = await Promise.all(
-//                     connections.map(async (conn) => {
-//                         const registerData = conn.model("UserRegister", require("../../models/UserModel/UserRegister").schema);
-//                         const newUser = new registerData(userData);
-//                         return await newUser.save();
-//                     })
-//                 );
+        const token = generateToken({ id: user._id, email: user.email, role: user.role });
 
-//                 res.send({ status: true, results });
-//             });
-//         } catch (error) {
-//             console.error("Error creating user:", error.message);
-//             next(createError(500, "Error creating new user"));
-//         }
-//     },
+        const refreshToken = jwt.sign(
+            { id: user._id, email: user.email, role: user.role },
+            process.env.REFRESH_TOKEN_SECRET,
+            { expiresIn: "1d" }
+        );
 
-//     loginCredential: async (req, res, next) => {
-//         try {
-//             const { email, password: payloadPassword } = req.body;
-//             const connections = req.app.locals.dbConnections;
+        res.cookie("jwt", refreshToken, {
+            httpOnly: true,
+            sameSite: "None",
+            secure: process.env.NODE_ENV === "production",
+            maxAge: 24 * 60 * 60 * 1000,
+        });
 
-//             const loginPromises = connections.map(async (conn) => {
-//                 const registerData = conn.model("UserRegister", require("../../models/UserModel/UserRegister").schema);
-//                 const user = await registerData.findOne({ email });
+        res.json({
+            status: true,
+            message: "Authentication successful",
+            token,
+            id: user._id,
+            name: user.name,
+            role: user.role,
+        });
+    }),
 
-//                 if (user) {
-//                     const match = await bcrypt.compare(payloadPassword, user.password);
-//                     if (match) {
-//                         const token = generateToken({ email: user.email });
-//                         const refreshToken = jwt.sign(
-//                             { email: user.email },
-//                             process.env.REFRESH_TOKEN_SECRET,
-//                             { expiresIn: "1d" }
-//                         );
+    // ── Profile ───────────────────────────────────────────────────────────────
 
-//                         res.cookie("jwt", refreshToken, {
-//                             httpOnly: true,
-//                             sameSite: "None",
-//                             secure: true,
-//                             maxAge: 24 * 60 * 60 * 1000,
-//                         });
+    getProfile: handleAsync(async (req, res) => {
+        const user = await registerData
+            .findById(req.user.id)
+            .select("-password -__v");
+        if (!user) throw createError(404, "User not found.");
+        res.json({ status: true, user });
+    }),
 
-//                         return {
-//                             status: true,
-//                             message: "Authentication successful",
-//                             token,
-//                             id: user._id,
-//                             name: user.name,
-//                         };
-//                     }
-//                 }
-//                 return null;
-//             });
+    updateProfile: handleAsync(async (req, res) => {
+        const { name, gender, mobile } = req.body;
+        const updated = await registerData
+            .findByIdAndUpdate(
+                req.user.id,
+                { name, gender, mobile },
+                { new: true, runValidators: true }
+            )
+            .select("-password -__v");
+        if (!updated) throw createError(404, "User not found.");
+        res.json({ status: true, message: "Profile updated", user: updated });
+    }),
 
-//             const results = await Promise.all(loginPromises);
+    // ── Cart ──────────────────────────────────────────────────────────────────
 
-//             // Respond with the first successful login or an error
-//             const validResult = results.find((result) => result !== null);
-//             if (validResult) {
-//                 res.send(validResult);
-//             } else {
-//                 res.send({ status: false, message: "Authentication failed" });
-//             }
-//         } catch (error) {
-//             console.error("Error during login:", error.message);
-//             next(createError(500, "Error during login"));
-//         }
-//     },
+    getCart: handleAsync(async (req, res) => {
+        const user = await registerData
+            .findById(req.user.id)
+            .populate("addToCart.productId", "-__v");
+        if (!user) throw createError(404, "User not found.");
+        res.json({ status: true, cart: user.addToCart });
+    }),
 
-//     findUserById: async (req, res, next) => {
-//         try {
-//             const { id } = req.params;
-//             const connections = req.app.locals.dbConnections;
+    addToCart: handleAsync(async (req, res) => {
+        const { productId, quantity = 1 } = req.body;
 
-//             const results = await Promise.all(
-//                 connections.map(async (conn) => {
-//                     const registerData = conn.model("UserRegister", require("../../models/UserModel/UserRegister").schema);
-//                     return await registerData.findById(id);
-//                 })
-//             );
+        const product = await productData.findById(productId);
+        if (!product) throw createError(404, "Product not found.");
 
-//             const user = results.find((result) => result !== null);
-//             if (user) {
-//                 res.send(user);
-//             } else {
-//                 throw createError(404, "User doesn't exist");
-//             }
-//         } catch (error) {
-//             console.error(error.message);
-//             if (error instanceof mongoose.CastError) {
-//                 next(createError(400, "Invalid User ID"));
-//             } else {
-//                 next(error);
-//             }
-//         }
-//     },
+        const user = await registerData.findById(req.user.id);
+        if (!user) throw createError(404, "User not found.");
 
-//     updateUserById: async (req, res, next) => {
-//         try {
-//             const { id } = req.params;
-//             const update = req.body;
-//             const connections = req.app.locals.dbConnections;
+        const existingItem = user.addToCart.find(
+            (item) => item.productId.toString() === productId
+        );
 
-//             const results = await Promise.all(
-//                 connections.map(async (conn) => {
-//                     const registerData = conn.model("UserRegister", require("../../models/UserModel/UserRegister").schema);
-//                     return await registerData.findByIdAndUpdate(id, update, { new: true });
-//                 })
-//             );
+        if (existingItem) {
+            existingItem.quantity += quantity;
+        } else {
+            user.addToCart.push({ productId, quantity });
+        }
 
-//             const updatedUser = results.find((result) => result !== null);
-//             if (updatedUser) {
-//                 res.send(updatedUser);
-//             } else {
-//                 throw createError(404, "User doesn't exist");
-//             }
-//         } catch (error) {
-//             console.error(error.message);
-//             if (error instanceof mongoose.CastError) {
-//                 next(createError(400, "Invalid User ID"));
-//             } else {
-//                 next(error);
-//             }
-//         }
-//     },
+        await user.save();
+        const updated = await registerData
+            .findById(req.user.id)
+            .populate("addToCart.productId", "-__v");
+        res.json({ status: true, message: "Added to cart", cart: updated.addToCart });
+    }),
 
-//     deleteUserById: async (req, res, next) => {
-//         try {
-//             const { id } = req.params;
-//             const connections = req.app.locals.dbConnections;
+    removeFromCart: handleAsync(async (req, res) => {
+        const { productId } = req.params;
 
-//             const results = await Promise.all(
-//                 connections.map(async (conn) => {
-//                     const registerData = conn.model("UserRegister", require("../../models/UserModel/UserRegister").schema);
-//                     return await registerData.findByIdAndDelete(id);
-//                 })
-//             );
+        const user = await registerData.findById(req.user.id);
+        if (!user) throw createError(404, "User not found.");
 
-//             const deletedUser = results.find((result) => result !== null);
-//             if (deletedUser) {
-//                 res.send(deletedUser);
-//             } else {
-//                 throw createError(404, "User doesn't exist");
-//             }
-//         } catch (error) {
-//             console.error(error.message);
-//             if (error instanceof mongoose.CastError) {
-//                 next(createError(400, "Invalid User ID"));
-//             } else {
-//                 next(error);
-//             }
-//         }
-//     },
-// };
+        user.addToCart = user.addToCart.filter(
+            (item) => item.productId.toString() !== productId
+        );
+        await user.save();
+
+        // Re-fetch with populate so client gets full product data
+        const updated = await registerData
+            .findById(req.user.id)
+            .populate("addToCart.productId", "-__v");
+        res.json({ status: true, message: "Item removed from cart", cart: updated.addToCart });
+    }),
+
+    updateCartItem: handleAsync(async (req, res) => {
+        const { productId } = req.params;
+        const { quantity } = req.body;
+
+        if (quantity < 1) throw createError(400, "Quantity must be at least 1.");
+
+        const user = await registerData.findById(req.user.id);
+        if (!user) throw createError(404, "User not found.");
+
+        const item = user.addToCart.find(
+            (item) => item.productId.toString() === productId
+        );
+        if (!item) throw createError(404, "Item not in cart.");
+
+        item.quantity = quantity;
+        await user.save();
+
+        // Re-fetch with populate so client gets full product data
+        const updated = await registerData
+            .findById(req.user.id)
+            .populate("addToCart.productId", "-__v");
+        res.json({ status: true, message: "Cart updated", cart: updated.addToCart });
+    }),
+
+    clearCart: handleAsync(async (req, res) => {
+        await registerData.findByIdAndUpdate(req.user.id, { addToCart: [] });
+        res.json({ status: true, message: "Cart cleared" });
+    }),
+
+    // ── Addresses ─────────────────────────────────────────────────────────────
+
+    getAddresses: handleAsync(async (req, res) => {
+        const user = await registerData.findById(req.user.id).select("addresses");
+        if (!user) throw createError(404, "User not found.");
+        res.json({ status: true, addresses: user.addresses });
+    }),
+
+    addAddress: handleAsync(async (req, res) => {
+        const { fullName, mobile, pincode, addressLine1, addressLine2, city, state, addressType, isDefault } = req.body;
+        const user = await registerData.findById(req.user.id);
+        if (!user) throw createError(404, "User not found.");
+
+        // If new address is default, unset all others
+        if (isDefault) {
+            user.addresses.forEach((a) => { a.isDefault = false; });
+        }
+        // If this is the first address, make it default
+        const makeDefault = isDefault || user.addresses.length === 0;
+
+        user.addresses.push({ fullName, mobile, pincode, addressLine1, addressLine2, city, state, addressType, isDefault: makeDefault });
+        await user.save();
+        res.status(201).json({ status: true, message: "Address added", addresses: user.addresses });
+    }),
+
+    updateAddress: handleAsync(async (req, res) => {
+        const { addressId } = req.params;
+        const user = await registerData.findById(req.user.id);
+        if (!user) throw createError(404, "User not found.");
+
+        const address = user.addresses.id(addressId);
+        if (!address) throw createError(404, "Address not found.");
+
+        if (req.body.isDefault) {
+            user.addresses.forEach((a) => { a.isDefault = false; });
+        }
+
+        Object.assign(address, req.body);
+        await user.save();
+        res.json({ status: true, message: "Address updated", addresses: user.addresses });
+    }),
+
+    deleteAddress: handleAsync(async (req, res) => {
+        const { addressId } = req.params;
+        const user = await registerData.findById(req.user.id);
+        if (!user) throw createError(404, "User not found.");
+
+        const address = user.addresses.id(addressId);
+        if (!address) throw createError(404, "Address not found.");
+
+        const wasDefault = address.isDefault;
+        address.deleteOne();
+
+        // If deleted address was default, make first remaining address default
+        if (wasDefault && user.addresses.length > 0) {
+            user.addresses[0].isDefault = true;
+        }
+
+        await user.save();
+        res.json({ status: true, message: "Address deleted", addresses: user.addresses });
+    }),
+
+    setDefaultAddress: handleAsync(async (req, res) => {
+        const { addressId } = req.params;
+        const user = await registerData.findById(req.user.id);
+        if (!user) throw createError(404, "User not found.");
+
+        user.addresses.forEach((a) => { a.isDefault = a._id.toString() === addressId; });
+        await user.save();
+        res.json({ status: true, message: "Default address updated", addresses: user.addresses });
+    }),
+
+    // ── Orders ────────────────────────────────────────────────────────────────
+
+    placeOrder: handleAsync(async (req, res) => {
+        const { addressId } = req.body;
+        const user = await registerData
+            .findById(req.user.id)
+            .populate("addToCart.productId");
+        if (!user) throw createError(404, "User not found.");
+        if (!user.addToCart.length) throw createError(400, "Cart is empty.");
+
+        // Validate address
+        let deliveryAddress = null;
+        if (addressId) {
+            const addr = user.addresses.id(addressId);
+            if (!addr) throw createError(400, "Selected address not found.");
+            deliveryAddress = {
+                fullName: addr.fullName,
+                mobile: addr.mobile,
+                pincode: addr.pincode,
+                addressLine1: addr.addressLine1,
+                addressLine2: addr.addressLine2,
+                city: addr.city,
+                state: addr.state,
+            };
+        } else {
+            const defaultAddr = user.addresses.find((a) => a.isDefault) || user.addresses[0];
+            if (!defaultAddr) throw createError(400, "Please add a delivery address before placing order.");
+            deliveryAddress = {
+                fullName: defaultAddr.fullName,
+                mobile: defaultAddr.mobile,
+                pincode: defaultAddr.pincode,
+                addressLine1: defaultAddr.addressLine1,
+                addressLine2: defaultAddr.addressLine2,
+                city: defaultAddr.city,
+                state: defaultAddr.state,
+            };
+        }
+
+        const items = user.addToCart
+            .filter((item) => item.productId && typeof item.productId === "object")
+            .map((item) => ({
+                productId: item.productId._id,
+                title: item.productId.title,
+                image: item.productId.image[0],
+                quantity: item.quantity,
+                price: Math.round(
+                    item.productId.maxPrice -
+                        (item.productId.discount / 100) * item.productId.maxPrice
+                ),
+            }));
+
+        const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+        // Expected delivery: 5 days from now
+        const expectedDelivery = new Date();
+        expectedDelivery.setDate(expectedDelivery.getDate() + 5);
+
+        user.orders.push({
+            items,
+            totalAmount,
+            deliveryAddress,
+            expectedDelivery,
+            statusHistory: [{ status: "confirmed", message: "Order placed successfully" }],
+        });
+        user.addToCart = [];
+        await user.save();
+
+        const newOrder = user.orders[user.orders.length - 1];
+        res.status(201).json({ status: true, message: "Order placed successfully", order: newOrder });
+    }),
+
+    getOrders: handleAsync(async (req, res) => {
+        const user = await registerData.findById(req.user.id).select("orders").lean();
+        if (!user) throw createError(404, "User not found.");
+        res.json({ status: true, orders: [...user.orders].reverse() });
+    }),
+
+    getOrderById: handleAsync(async (req, res) => {
+        const { orderId } = req.params;
+        const user = await registerData.findById(req.user.id).select("orders").lean();
+        if (!user) throw createError(404, "User not found.");
+        const order = user.orders.find((o) => o._id.toString() === orderId);
+        if (!order) throw createError(404, "Order not found.");
+        res.json({ status: true, order });
+    }),
+
+    cancelOrder: handleAsync(async (req, res) => {
+        const { orderId } = req.params;
+        const user = await registerData.findById(req.user.id);
+        if (!user) throw createError(404, "User not found.");
+
+        const order = user.orders.id(orderId);
+        if (!order) throw createError(404, "Order not found.");
+        if (["delivered", "cancelled"].includes(order.status)) {
+            throw createError(400, `Cannot cancel an order that is already ${order.status}.`);
+        }
+
+        order.status = "cancelled";
+        order.statusHistory.push({ status: "cancelled", message: "Cancelled by customer" });
+        await user.save();
+        res.json({ status: true, message: "Order cancelled", order });
+    }),
+
+    // ── Admin: update order status ────────────────────────────────────────────
+
+    adminUpdateOrderStatus: handleAsync(async (req, res) => {
+        const { userId, orderId } = req.params;
+        const { status, message } = req.body;
+
+        const validStatuses = ["pending", "confirmed", "packed", "shipped", "out_for_delivery", "delivered", "cancelled"];
+        if (!validStatuses.includes(status)) throw createError(400, "Invalid status.");
+
+        const user = await registerData.findById(userId);
+        if (!user) throw createError(404, "User not found.");
+
+        const order = user.orders.id(orderId);
+        if (!order) throw createError(404, "Order not found.");
+
+        order.status = status;
+        order.statusHistory.push({
+            status,
+            message: message || `Order ${status}`,
+        });
+        await user.save();
+        res.json({ status: true, message: "Order status updated", order });
+    }),
+
+    // ── Admin: get all orders ─────────────────────────────────────────────────
+
+    adminGetAllOrders: handleAsync(async (req, res) => {
+        const { page = 1, limit = 20, status = "" } = req.query;
+        const skip = (Number(page) - 1) * Number(limit);
+
+        const pipeline = [
+            { $unwind: "$orders" },
+            ...(status ? [{ $match: { "orders.status": status } }] : []),
+            { $sort: { "orders.placedAt": -1 } },
+            {
+                $project: {
+                    _id: 0,
+                    orderId: "$orders._id",
+                    order: "$orders",
+                    userId: "$_id",
+                    userName: "$name",
+                    userEmail: "$email",
+                    userMobile: "$mobile",
+                },
+            },
+        ];
+
+        const [results, countResult] = await Promise.all([
+            registerData.aggregate([...pipeline, { $skip: skip }, { $limit: Number(limit) }]),
+            registerData.aggregate([...pipeline, { $count: "total" }]),
+        ]);
+
+        const total = countResult[0]?.total || 0;
+        res.json({
+            status: true,
+            orders: results,
+            total,
+            page: Number(page),
+            totalPages: Math.ceil(total / Number(limit)),
+        });
+    }),
+
+    // ── Admin helpers ─────────────────────────────────────────────────────────
+
+    getAlluserData: handleAsync(async (req, res) => {
+        const result = await registerData.find({}, { password: 0, __v: 0 });
+        res.json(result);
+    }),
+
+    findUserById: handleAsync(async (req, res) => {
+        const user = await registerData.findById(req.params.id).select("-password -__v");
+        if (!user) throw createError(404, "User not found.");
+        res.json(user);
+    }),
+
+    updateUserById: handleAsync(async (req, res) => {
+        const result = await registerData.findByIdAndUpdate(
+            req.params.id,
+            req.body,
+            { new: true }
+        ).select("-password -__v");
+        if (!result) throw createError(404, "User not found.");
+        res.json(result);
+    }),
+
+    deleteUserById: handleAsync(async (req, res) => {
+        const result = await registerData.findByIdAndDelete(req.params.id);
+        if (!result) throw createError(404, "User not found.");
+        res.json({ status: true, message: "User deleted successfully" });
+    }),
+};

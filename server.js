@@ -1,70 +1,77 @@
-// single db connection at a time
-
-require('dotenv').config()
-const express = require('express');
-const morgan = require('morgan');
-const cors = require('cors')
-
+require("dotenv").config();
+const express = require("express");
+const morgan = require("morgan");
+const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const { errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
-app.use(express.json({ limit: '50mb' }));
-app.use(express.json());
-app.use(morgan('dev'));
-app.use(cors(
-    // {
-    //     credentials: true, // Allow cookies
-    // }
-))
-app.use(express.urlencoded({ extended: true }))
 
-require('./initDB')()
+// ── Security headers ──────────────────────────────────────────────────────────
+app.use(helmet());
 
-const adminRouter = require('./routers/AdminRouter/adminRouts')
+// ── CORS ──────────────────────────────────────────────────────────────────────
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:3000")
+    .split(",")
+    .map((o) => o.trim());
 
-const userRouter = require('./routers/UserRouter/userRouts')
-app.use('/ecommerce', adminRouter)
-app.use('/user', userRouter)
-///http://localhost:9000/users
+app.use(
+    cors({
+        origin: (origin, callback) => {
+            // Allow requests with no origin (mobile apps, curl, Postman)
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error(`CORS policy: origin ${origin} not allowed`));
+            }
+        },
+        credentials: true,
+    })
+);
 
-const PORT = 9000 || process.env.PORT
-app.listen((PORT), () => {
-    console.log(`Server is running in the PORT of ${PORT}`)
-})
+// ── Body parsers ──────────────────────────────────────────────────────────────
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true }));
 
+// ── Logging ───────────────────────────────────────────────────────────────────
+if (process.env.NODE_ENV !== "test") {
+    app.use(morgan("dev"));
+}
 
+// ── Rate limiting — auth routes only ─────────────────────────────────────────
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 20,                   // 20 login/register attempts per IP per window
+    message: { status: false, message: "Too many attempts, please try again after 15 minutes." },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
 
+// ── Database ──────────────────────────────────────────────────────────────────
+require("./initDB")();
 
-// // multiple db connection at a same time
+// ── Routes ────────────────────────────────────────────────────────────────────
+const adminRouter = require("./routers/AdminRouter/adminRouts");
+const userRouter = require("./routers/UserRouter/userRouts");
+const paymentRouter = require("./routers/PaymentRouter/paymentRouts");
+const reviewRouter = require("./routers/ReviewRouter/reviewRouts");
 
-// require("dotenv").config();
-// const express = require("express");
-// const morgan = require("morgan");
-// const cors = require("cors");
-// const initDB = require("./initDB");
+app.use("/ecommerce", adminRouter);
+app.use("/user", userRouter);
+app.use("/payment", paymentRouter);
+app.use("/reviews", reviewRouter);
 
-// const app = express();
-// app.use(express.json({ limit: "50mb" }));
-// app.use(morgan("dev"));
-// app.use(cors());
-// app.use(express.urlencoded({ extended: true }));
+// ── Health check ──────────────────────────────────────────────────────────────
+app.get("/health", (req, res) => {
+    res.status(200).json({ status: true, message: "Server is running" });
+});
 
-// (async () => {
-//   try {
-//     const dbConnections = await initDB();
-//     app.locals.dbConnections = dbConnections;
-//     console.log("Databases initialized successfully.");
-//   } catch (error) {
-//     console.error("Failed to initialize databases:", error.message);
-//     process.exit(1);
-//   }
-// })();
+// ── Global error handler ──────────────────────────────────────────────────────
+app.use(errorHandler);
 
-// const adminRouter = require("./routers/AdminRouter/adminRouts");
-// const userRouter = require("./routers/UserRouter/userRouts");
-// app.use("/ecommerce", adminRouter);
-// app.use("/user", userRouter);
-
-// const PORT = 9000 || process.env.PORT;
-// app.listen(PORT, () => {
-//   console.log(`Server is running on port ${PORT}`);
-// });
+// ── Start ─────────────────────────────────────────────────────────────────────
+const PORT = process.env.PORT || 9000;
+app.listen(PORT, () => {
+    console.log(`Server is running on PORT ${PORT}`);
+});
