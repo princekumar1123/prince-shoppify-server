@@ -12,23 +12,23 @@ const app = express();
 app.use(helmet());
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
-// const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:3000")
-//     .split(",")
-//     .map((o) => o.trim());
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:3000")
+    .split(",")
+    .map((o) => o.trim());
 
-// app.use(
-//     cors({
-//         origin: (origin, callback) => {
-//             // Allow requests with no origin (mobile apps, curl, Postman)
-//             if (!origin || allowedOrigins.includes(origin)) {
-//                 callback(null, true);
-//             } else {
-//                 callback(new Error(`CORS policy: origin ${origin} not allowed`));
-//             }
-//         },
-//         credentials: true,
-//     })
-// );
+app.use(
+    cors({
+        origin: (origin, callback) => {
+            // Allow requests with no origin (Postman, mobile apps, curl)
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error(`CORS policy: origin ${origin} not allowed`));
+            }
+        },
+        credentials: true,
+    })
+);
 
 // ── Body parsers ──────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "50mb" }));
