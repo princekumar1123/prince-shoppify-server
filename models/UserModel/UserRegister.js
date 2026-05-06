@@ -86,6 +86,16 @@ const RegisterSchema = new Schema(
         addresses: { type: [AddressSchema], default: [] },
         addToCart: { type: [CartItemSchema], default: [] },
         orders: { type: [OrderSchema], default: [] },
+        wishlist: { type: [{ type: Schema.Types.ObjectId, ref: "productsDdata" }], default: [] },
+        recentlyViewed: {
+            type: [
+                {
+                    productId: { type: Schema.Types.ObjectId, ref: "productsDdata", required: true },
+                    viewedAt: { type: Date, default: Date.now },
+                },
+            ],
+            default: [],
+        },
     },
     { timestamps: true }
 );

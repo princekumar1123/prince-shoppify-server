@@ -375,6 +375,89 @@ module.exports = {
         res.json({ status: true, message: "Order status updated", order });
     }),
 
+    // ── Wishlist ──────────────────────────────────────────────────────────────
+
+    getWishlist: handleAsync(async (req, res) => {
+        const user = await registerData
+            .findById(req.user.id)
+            .populate("wishlist", "-__v -addToCart -orders -addresses -password");
+        if (!user) throw createError(404, "User not found.");
+        res.json({ status: true, wishlist: user.wishlist });
+    }),
+
+    addToWishlist: handleAsync(async (req, res) => {
+        const { productId } = req.body;
+        if (!mongoose.Types.ObjectId.isValid(productId)) throw createError(400, "Invalid product ID.");
+
+        const user = await registerData.findById(req.user.id);
+        if (!user) throw createError(404, "User not found.");
+
+        const alreadyIn = user.wishlist.some((id) => id.toString() === productId);
+        if (!alreadyIn) {
+            user.wishlist.push(productId);
+            await user.save();
+        }
+
+        const updated = await registerData
+            .findById(req.user.id)
+            .populate("wishlist", "-__v -addToCart -orders -addresses -password");
+        res.json({ status: true, message: "Added to wishlist", wishlist: updated.wishlist });
+    }),
+
+    removeFromWishlist: handleAsync(async (req, res) => {
+        const { productId } = req.params;
+        const user = await registerData.findById(req.user.id);
+        if (!user) throw createError(404, "User not found.");
+
+        user.wishlist = user.wishlist.filter((id) => id.toString() !== productId);
+        await user.save();
+
+        const updated = await registerData
+            .findById(req.user.id)
+            .populate("wishlist", "-__v -addToCart -orders -addresses -password");
+        res.json({ status: true, message: "Removed from wishlist", wishlist: updated.wishlist });
+    }),
+
+    // ── Recently Viewed ───────────────────────────────────────────────────────
+
+    getRecentlyViewed: handleAsync(async (req, res) => {
+        const user = await registerData
+            .findById(req.user.id)
+            .populate("recentlyViewed.productId", "-__v -addToCart -orders -addresses -password");
+        if (!user) throw createError(404, "User not found.");
+
+        // Sort newest first, return up to 10
+        const sorted = [...user.recentlyViewed]
+            .sort((a, b) => new Date(b.viewedAt) - new Date(a.viewedAt))
+            .slice(0, 10);
+
+        res.json({ status: true, recentlyViewed: sorted });
+    }),
+
+    trackRecentlyViewed: handleAsync(async (req, res) => {
+        const { productId } = req.body;
+        if (!mongoose.Types.ObjectId.isValid(productId)) throw createError(400, "Invalid product ID.");
+
+        const user = await registerData.findById(req.user.id);
+        if (!user) throw createError(404, "User not found.");
+
+        // Remove existing entry for this product (to re-insert at top)
+        user.recentlyViewed = user.recentlyViewed.filter(
+            (rv) => rv.productId.toString() !== productId
+        );
+
+        // Add to front
+        user.recentlyViewed.unshift({ productId, viewedAt: new Date() });
+
+        // Keep only last 20
+        if (user.recentlyViewed.length > 20) {
+            user.recentlyViewed = user.recentlyViewed.slice(0, 20);
+        }
+
+        await user.save();
+        res.json({ status: true, message: "Tracked" });
+    }),
+
     // ── Admin: get all orders ─────────────────────────────────────────────────
 
     adminGetAllOrders: handleAsync(async (req, res) => {
@@ -416,8 +499,37 @@ module.exports = {
     // ── Admin helpers ─────────────────────────────────────────────────────────
 
     getAlluserData: handleAsync(async (req, res) => {
-        const result = await registerData.find({}, { password: 0, __v: 0 });
-        res.json(result);
+        const { page = 1, limit = 10, search = "", role = "" } = req.query;
+        const skip = (Number(page) - 1) * Number(limit);
+
+        const query = {};
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: "i" } },
+                { email: { $regex: search, $options: "i" } },
+                { mobile: { $regex: search, $options: "i" } },
+            ];
+        }
+        if (role && ["user", "admin"].includes(role)) {
+            query.role = role;
+        }
+
+        const [users, total] = await Promise.all([
+            registerData
+                .find(query, { password: 0, __v: 0, addToCart: 0, addresses: 0 })
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(Number(limit)),
+            registerData.countDocuments(query),
+        ]);
+
+        res.json({
+            status: true,
+            users,
+            total,
+            page: Number(page),
+            totalPages: Math.ceil(total / Number(limit)),
+        });
     }),
 
     findUserById: handleAsync(async (req, res) => {

@@ -22,6 +22,8 @@ const productRules = [
 // ── Public routes ─────────────────────────────────────────────────────────────
 router.get("/getproducts", adminController.getAllProducts);
 router.get("/getproductbyid/:id", adminController.getProductById);
+router.get("/getproductbyid/:id/similar", adminController.getSimilarProducts);
+router.get("/search/suggestions", adminController.searchSuggestions);
 
 // ── Protected routes (admin only) ────────────────────────────────────────────
 router.post("/addproduct", authenticate, verifyAdmin, productRules, validate, adminController.addProduct);

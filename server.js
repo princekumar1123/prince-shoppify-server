@@ -4,6 +4,7 @@ const morgan = require("morgan");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const mongoose = require("mongoose");
 const { errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
@@ -40,16 +41,28 @@ if (process.env.NODE_ENV !== "test") {
 }
 
 // ── Rate limiting — auth routes only ─────────────────────────────────────────
-const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 20,                   // 20 login/register attempts per IP per window
-    message: { status: false, message: "Too many attempts, please try again after 15 minutes." },
-    standardHeaders: true,
-    legacyHeaders: false,
-});
 
 // ── Database ──────────────────────────────────────────────────────────────────
 require("./initDB")();
+
+const healthLimiter = rateLimit({
+    windowMs: 60 * 1000,  
+    max: 30,              
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => {
+        return false;
+    },
+});
+
+app.get("/health", healthLimiter, async (_req, res) => {
+    try {
+        await mongoose.connection.db.admin().command({ ping: 1 });
+        res.status(200).json({ status: "alive", db: "connected" });
+    } catch (err) {
+        res.status(500).json({ status: "alive", db: "disconnected" });
+    }
+});
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 const adminRouter = require("./routers/AdminRouter/adminRouts");
@@ -61,11 +74,6 @@ app.use("/ecommerce", adminRouter);
 app.use("/user", userRouter);
 app.use("/payment", paymentRouter);
 app.use("/reviews", reviewRouter);
-
-// ── Health check ──────────────────────────────────────────────────────────────
-app.get("/health", (req, res) => {
-    res.status(200).json({ status: true, message: "Server is running" });
-});
 
 // ── Global error handler ──────────────────────────────────────────────────────
 app.use(errorHandler);

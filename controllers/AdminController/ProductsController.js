@@ -72,4 +72,41 @@ module.exports = {
         if (!deleted) throw createError(404, "Product not found.");
         res.status(200).json({ status: true, message: "Product deleted successfully" });
     }),
+
+    getSimilarProducts: handleAsync(async (req, res) => {
+        const { id } = req.params;
+        const limit = Math.min(Number(req.query.limit) || 8, 20);
+
+        const product = await productData.findById(id, { category: 1, brand: 1, tags: 1 });
+        if (!product) throw createError(404, "Product not found.");
+
+        // Find same category, exclude current product, sort by rating desc
+        const similar = await productData
+            .find({ category: product.category, _id: { $ne: id } }, { __v: 0 })
+            .sort({ rating: -1 })
+            .limit(limit);
+
+        res.status(200).json({ status: true, products: similar });
+    }),
+
+    searchSuggestions: handleAsync(async (req, res) => {
+        const { q = "" } = req.query;
+        if (!q.trim()) return res.json({ status: true, suggestions: [] });
+
+        const results = await productData
+            .find(
+                {
+                    $or: [
+                        { title: { $regex: q, $options: "i" } },
+                        { brand: { $regex: q, $options: "i" } },
+                        { category: { $regex: q, $options: "i" } },
+                    ],
+                },
+                { title: 1, brand: 1, category: 1, image: 1, maxPrice: 1, discount: 1 }
+            )
+            .limit(8)
+            .sort({ rating: -1 });
+
+        res.json({ status: true, suggestions: results });
+    }),
 };

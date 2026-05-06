@@ -66,6 +66,15 @@ router.get("/orders", authenticate, ctrl.getOrders);
 router.get("/orders/:orderId", authenticate, ctrl.getOrderById);
 router.patch("/orders/:orderId/cancel", authenticate, ctrl.cancelOrder);
 
+// ── Wishlist ──────────────────────────────────────────────────────────────────
+router.get("/wishlist", authenticate, ctrl.getWishlist);
+router.post("/wishlist", authenticate, ctrl.addToWishlist);
+router.delete("/wishlist/:productId", authenticate, ctrl.removeFromWishlist);
+
+// ── Recently Viewed ───────────────────────────────────────────────────────────
+router.get("/recently-viewed", authenticate, ctrl.getRecentlyViewed);
+router.post("/recently-viewed", authenticate, ctrl.trackRecentlyViewed);
+
 // ── Admin ─────────────────────────────────────────────────────────────────────
 router.get("/getAllUsers", authenticate, verifyAdmin, ctrl.getAlluserData);
 router.get("/getAUserById/:id", authenticate, verifyAdmin, ctrl.findUserById);
