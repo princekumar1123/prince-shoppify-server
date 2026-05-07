@@ -5,6 +5,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const mongoose = require("mongoose");
+const cookieParser = require("cookie-parser");
 const { errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
@@ -34,6 +35,7 @@ app.use(
 // ── Body parsers ──────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== "test") {

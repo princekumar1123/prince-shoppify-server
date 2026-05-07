@@ -3,9 +3,8 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const registerData = require("../../models/UserModel/UserRegister");
 const productData = require("../../models/AdminModel/productsData");
-const { generateToken } = require("../../services/jwtUtils");
+const { generateToken, verifyRefreshToken } = require("../../services/jwtUtils");
 const jwt = require("jsonwebtoken");
-
 const handleAsync = (fn) => async (req, res, next) => {
     try {
         await fn(req, res, next);
@@ -50,14 +49,16 @@ module.exports = {
         const refreshToken = jwt.sign(
             { id: user._id, email: user.email, role: user.role },
             process.env.REFRESH_TOKEN_SECRET,
-            { expiresIn: "1d" }
+            { expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || "7d" }
         );
+
+        const isProduction = process.env.NODE_ENV === "production";
 
         res.cookie("jwt", refreshToken, {
             httpOnly: true,
-            sameSite: "None",
-            secure: process.env.NODE_ENV === "production",
-            maxAge: 24 * 60 * 60 * 1000,
+            sameSite: isProduction ? "None" : "Lax",
+            secure: isProduction,
+            maxAge: 7 * 24 * 60 * 60 * 1000, // match REFRESH_TOKEN_EXPIRES_IN
         });
 
         res.json({
@@ -68,6 +69,43 @@ module.exports = {
             name: user.name,
             role: user.role,
         });
+    }),
+
+    // Silently issue a new access token using the httpOnly refresh token cookie
+    refreshToken: handleAsync(async (req, res) => {
+        const refreshToken = req.cookies?.jwt;
+        if (!refreshToken) throw createError(401, "No refresh token.");
+
+        let decoded;
+        try {
+            decoded = verifyRefreshToken(refreshToken);
+        } catch {
+            throw createError(403, "Refresh token expired or invalid. Please log in again.");
+        }
+
+        // Make sure the user still exists
+        const user = await registerData.findById(decoded.id).select("_id email role name");
+        if (!user) throw createError(401, "User no longer exists.");
+
+        const newAccessToken = generateToken({ id: user._id, email: user.email, role: user.role });
+
+        res.json({
+            status: true,
+            token: newAccessToken,
+            id: user._id,
+            name: user.name,
+            role: user.role,
+        });
+    }),
+
+    logoutUser: handleAsync(async (req, res) => {
+        const isProduction = process.env.NODE_ENV === "production";
+        res.clearCookie("jwt", {
+            httpOnly: true,
+            sameSite: isProduction ? "None" : "Lax",
+            secure: isProduction,
+        });
+        res.json({ status: true, message: "Logged out successfully" });
     }),
 
     // ── Profile ───────────────────────────────────────────────────────────────

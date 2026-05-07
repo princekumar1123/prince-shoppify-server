@@ -41,6 +41,8 @@ const addressRules = [
 // ── Public ────────────────────────────────────────────────────────────────────
 router.post("/register", authLimiter, registerRules, validate, ctrl.createNewUser);
 router.post("/login", authLimiter, loginRules, validate, ctrl.loginCredential);
+router.post("/refresh", ctrl.refreshToken);   // uses httpOnly cookie — no auth header needed
+router.post("/logout", ctrl.logoutUser);      // clears the refresh token cookie
 
 // ── Profile ───────────────────────────────────────────────────────────────────
 router.get("/profile", authenticate, ctrl.getProfile);
